@@ -142,6 +142,22 @@ attributes_effects.remove_object = function(object_guid)
 	core.log("action", "[attributes_effects] Removed all effects groups from object "..object_guid)
 end
 
+function attributes_effects.set_object_verbose(object_guid)
+	local object_data = attributes_effects.objects_list[object_guid]
+	if not object_data then
+		return
+	end
+	object_data.verbose = true
+end
+
+function attributes_effects.get_object_verbose(object_guid)
+	local object_data = attributes_effects.objects_list[object_guid]
+	if not object_data then
+		return false
+	end
+	return object_data.verbose
+end
+
 attributes_effects.object_effects_groups_callback = function(object_guid, callback_name, ...)
 	local object_data = attributes_effects.objects_list[object_guid]
 	if not object_data then

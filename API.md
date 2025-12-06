@@ -1,11 +1,19 @@
 
 # Attributes Effects API
 
+`attributes_effects` is a general-purpose framework for managing temporary and permanent modifications to object attributes in Luanti/Minetest. It provides a flexible system for applying, combining, and removing effects on any object property (players, entities, etc.).
+
+The system is **not limited to combat** - it can be used for any attribute modification such as:
+- Movement speed, jump height, physics overrides
+- Visual effects (fog, vision range, lighting)
+- Entity behaviors (AI parameters, animation speeds)
+- Custom game mechanics (resource regeneration, skill modifiers)
+
 ## Core Functions
 
 ### attributes_effects.register_value_effect(name, effect_def)
 
-Registers a new value effect that can be applied to objects.
+Registers a new value effect that can be applied to objects. This defines **what** can be modified and **how** to read/write the attribute.
 
 **Parameters:**
 - `name` (string) - Unique effect name
@@ -17,18 +25,44 @@ Registers a new value effect that can be applied to objects.
     - `effect_def` - Self reference
     - `orig_value` - Original value
     - `values` - Array of modifier tables `{value = X, rule = "...", priority = Y}`
+  - `cb_on_apply(effect_def, object_data, object, calc_value)` - (Optional) Called after the effect value is applied
+    - `effect_def` - Self reference
+    - `object_data` - Internal object data structure
+    - `object` - The object reference
+    - `calc_value` - The calculated value that was applied
 
 **Example:**
 ```lua
-attributes_effects.register_value_effect("hp", {
+-- Example 1: Simple numeric attribute (player speed multiplier)
+attributes_effects.register_value_effect("player:speed", {
     cb_is_available = function(effect_def, object)
-        return object:is_player() or object:get_luaentity()
+        return object:is_player()
     end,
     cb_get_value = function(effect_def, object)
-        return object:get_hp()
+        return 1.0  -- Default speed multiplier
     end,
     cb_set_value = function(effect_def, object, value)
-        object:set_hp(value)
+        local physics = object:get_physics_override()
+        physics.speed = value
+        object:set_physics_override(physics)
+    end,
+    cb_calculate_value = attributes_effects.default_calculate_value
+})
+
+-- Example 2: Entity attribute (mob walk velocity)
+attributes_effects.register_value_effect("mob:walk_velocity", {
+    cb_is_available = function(effect_def, object)
+        local luaent = object:get_luaentity()
+        return luaent and luaent.walk_velocity ~= nil
+    end,
+    cb_get_value = function(effect_def, object)
+        return object:get_luaentity().walk_velocity
+    end,
+    cb_set_value = function(effect_def, object, value)
+        local luaent = object:get_luaentity()
+        if luaent then
+            luaent.walk_velocity = value
+        end
     end,
     cb_calculate_value = attributes_effects.default_calculate_value
 })
@@ -46,7 +80,10 @@ Adds an effects group to an object (player or entity).
 - `effects_group` (table) - Effects group definition:
   - `cb_update(effects_group, object, dtime, cb_add_value)` - Callback called every step
     - Must return `true` to continue or `false` to terminate the group
-    - Use `cb_add_value(effect_name, value, rule, priority)` to add modifiers
+    - Use `cb_add_value(object, effect_name, value_table)` to add modifiers
+      - `object` - The object reference
+      - `effect_name` - Name of the effect to modify
+      - `value_table` - Table with fields: `{value = X, rule = "...", priority = Y}`
   - `cb_remove(effects_group, object_guid)` - (Optional) Callback when removing the group
 
 **Return value:**
@@ -64,7 +101,7 @@ local group_id = attributes_effects.add_effects_group_to_object(
             if self.duration <= 0 then
                 return false
             end
-            cb_add_value("hp", -1, "post_sum", 100)
+            cb_add_value(object, "hp", {value = -1, rule = "post_sum", priority = 100})
             attributes_effects.request_object_on_step_update(object:get_guid())
             return true
         end
@@ -154,6 +191,29 @@ Calls a named callback on all effects groups of an object.
 
 ---
 
+### attributes_effects.set_object_verbose(object_guid)
+
+Enables verbose/debug mode for an object. When enabled, detailed debug information about effects processing will be printed to the console/log.
+
+**Parameters:**
+- `object_guid` (string) - Object GUID
+
+**Note:** Verbose mode is automatically disabled after one step.
+
+---
+
+### attributes_effects.get_object_verbose(object_guid)
+
+Gets the verbose/debug mode status for an object.
+
+**Parameters:**
+- `object_guid` (string) - Object GUID
+
+**Return value:**
+- `verbose` (boolean) - `true` if verbose mode is enabled, `false` otherwise
+
+---
+
 ### attributes_effects.default_calculate_value(effect_def, orig_value, value_list)
 
 Default function for calculating the final value from modifiers with priority support.
@@ -217,3 +277,14 @@ Table of objects with active effects, indexed by GUID:
 
 ### attributes_effects.effects_groups_list
 Reverse mapping of effects group ID to object GUID.
+
+### attributes_effects.gstep_data
+Global step tracking data:
+```lua
+{
+    gstep = number,  -- Current global step counter (resets at 2,000,000,000)
+    gtime = number   -- Accumulated game time
+}
+```
+
+---

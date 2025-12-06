@@ -54,7 +54,7 @@ core.register_globalstep(function(dtime)
 			end
 
 			local object = core.objects_by_guid[object_guid]
-			if object then
+			if object and object:is_valid() then
 				if verbose then
 					print("  Processing effects groups:")
 				end
@@ -64,7 +64,7 @@ core.register_globalstep(function(dtime)
 					if verbose then
 						print("    Group ID: "..effects_group_id)
 					end
-					if not effects_group.cb_update(effects_group, object, dtime, cb_add_value) then
+					if not effects_group:cb_update(object, dtime, cb_add_value) then
 						if verbose then
 							print("    Removing effects group "..effects_group_id)
 						end
